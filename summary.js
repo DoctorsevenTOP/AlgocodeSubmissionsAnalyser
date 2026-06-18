@@ -1,5 +1,6 @@
 const api = typeof browser !== 'undefined' ? browser : chrome;
 
+// === ТЕМЫ ===
 const themes = {
   dark: {
     '--bg-primary': '#1a1a2e', '--bg-secondary': '#16213e',
@@ -28,6 +29,10 @@ const themes = {
   }
 };
 
+// === ЗНАЧЕНИЯ ПО УМОЛЧАНИЮ ===
+const DEFAULT_THRESHOLDS = [25, 50, 75, 99];
+const DEFAULT_COLORS = ['#e74c3c', '#e67e22', '#f1c40f', '#7bed9f', '#2ecc71'];
+
 function applyTheme(themeName) {
   const theme = themes[themeName] || themes.dark;
   const root = document.documentElement;
@@ -43,74 +48,191 @@ function applyTheme(themeName) {
   }
 }
 
-function getCellColor(pct, colors) {
-  if (pct >= 100) return colors[100];
-  if (pct > 80) return colors[100];
-  if (pct > 60) return colors[80];
-  if (pct > 30) return colors[60];
-  return colors[30];
+// === ОПРЕДЕЛЕНИЕ ЦВЕТА ПО ПРОЦЕНТУ ===
+// thresholds: [p1, p2, p3, p4] — 4 порога
+// colors: [c0, c1, c2, c3, c4] — 5 цветов
+function getCellColor(pct, colors, thresholds) {
+  const [p1, p2, p3, p4] = thresholds;
+  if (pct >= 100) return colors[4];
+  if (pct >= p4) return colors[3];
+  if (pct >= p3) return colors[2];
+  if (pct >= p2) return colors[1];
+  if (pct >= p1) return colors[0];
+  return colors[0]; // ниже первого порога — самый "плохой" цвет
 }
 
 function hexToArgb(hex) {
   return 'FF' + hex.replace('#', '').toUpperCase();
 }
 
+// === ГЛАВНАЯ ИНИЦИАЛИЗАЦИЯ ===
 document.addEventListener('DOMContentLoaded', async () => {
-  const { allContestsData, theme, colors } = await api.storage.local.get([
-    'allContestsData', 'theme', 'colors'
+  const data = await api.storage.local.get([
+    'allContestsData', 'theme', 'thresholds', 'colors'
   ]);
   
-  const currentTheme = theme || 'dark';
-  const currentColors = colors || {
-    30: '#e74c3c', 60: '#f39c12', 80: '#7bed9f', 100: '#2ecc71'
-  };
+  const currentTheme = data.theme || 'dark';
+  const currentThresholds = data.thresholds || DEFAULT_THRESHOLDS.slice();
+  const currentColors = data.colors || DEFAULT_COLORS.slice();
   
   applyTheme(currentTheme);
   
+  // Инициализация UI настроек
   document.getElementById('themeSelect').value = currentTheme;
-  document.getElementById('color30').value = currentColors[30];
-  document.getElementById('color60').value = currentColors[60];
-  document.getElementById('color80').value = currentColors[80];
-  document.getElementById('color100').value = currentColors[100];
   
-  document.getElementById('exportBtn').addEventListener('click', () => exportToExcel(currentColors));
-  document.getElementById('closeBtn').addEventListener('click', () => window.close());
+  // Загрузка порогов
+  document.getElementById('th1').value = currentThresholds[0];
+  document.getElementById('th2').value = currentThresholds[1];
+  document.getElementById('th3').value = currentThresholds[2];
+  document.getElementById('th4').value = currentThresholds[3];
   
-  document.getElementById('settingsBtn').addEventListener('click', () => {
-    const panel = document.getElementById('settingsPanel');
-    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-  });
+  // Загрузка цветов
+  document.getElementById('color0').value = currentColors[0];
+  document.getElementById('color1').value = currentColors[1];
+  document.getElementById('color2').value = currentColors[2];
+  document.getElementById('color3').value = currentColors[3];
+  document.getElementById('color4').value = currentColors[4];
   
+  // Обновление подписей диапазонов
+  updateRangeLabels(currentThresholds);
+  
+  // === ОБРАБОТЧИКИ НАСТРОЕК ===
+  
+  // Тема
   document.getElementById('themeSelect').addEventListener('change', (e) => {
     applyTheme(e.target.value);
     api.storage.local.set({ theme: e.target.value });
   });
   
-  ['color30', 'color60', 'color80', 'color100'].forEach(id => {
-    document.getElementById(id).addEventListener('change', () => {
-      const newColors = {
-        30: document.getElementById('color30').value,
-        60: document.getElementById('color60').value,
-        80: document.getElementById('color80').value,
-        100: document.getElementById('color100').value
-      };
-      api.storage.local.set({ colors: newColors });
-      render(allContestsData || [], newColors);
-    });
+  // Пороги
+  ['th1', 'th2', 'th3', 'th4'].forEach(id => {
+    document.getElementById(id).addEventListener('change', saveThresholds);
   });
   
-  const contests = allContestsData || [];
+  // Цвета
+  ['color0', 'color1', 'color2', 'color3', 'color4'].forEach(id => {
+    document.getElementById(id).addEventListener('input', saveColors);
+  });
+  
+  // Сброс порогов
+  document.getElementById('resetThresholds').addEventListener('click', () => {
+    document.getElementById('th1').value = DEFAULT_THRESHOLDS[0];
+    document.getElementById('th2').value = DEFAULT_THRESHOLDS[1];
+    document.getElementById('th3').value = DEFAULT_THRESHOLDS[2];
+    document.getElementById('th4').value = DEFAULT_THRESHOLDS[3];
+    saveThresholds();
+  });
+  
+  // Сброс цветов
+  document.getElementById('resetColors').addEventListener('click', () => {
+    document.getElementById('color0').value = DEFAULT_COLORS[0];
+    document.getElementById('color1').value = DEFAULT_COLORS[1];
+    document.getElementById('color2').value = DEFAULT_COLORS[2];
+    document.getElementById('color3').value = DEFAULT_COLORS[3];
+    document.getElementById('color4').value = DEFAULT_COLORS[4];
+    saveColors();
+  });
+  
+  // Кнопки управления
+  document.getElementById('exportBtn').addEventListener('click', () => {
+    exportToExcel(getCurrentColors(), getCurrentThresholds());
+  });
+  document.getElementById('closeBtn').addEventListener('click', () => window.close());
+  document.getElementById('settingsBtn').addEventListener('click', () => {
+    const panel = document.getElementById('settingsPanel');
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  });
+  
+  // Рендер данных
+  const contests = data.allContestsData || [];
   if (contests.length === 0) {
     document.getElementById('contestsContainer').innerHTML = 
       '<div class="empty">Нет данных. Добавьте задачи в popup и нажмите "Сканировать".</div>';
     return;
   }
   
-  render(contests, currentColors);
+  render(contests, currentColors, currentThresholds);
 });
 
-function render(contests, colors) {
+// === ПОЛУЧЕНИЕ ТЕКУЩИХ ЗНАЧЕНИЙ ИЗ UI ===
+function getCurrentThresholds() {
+  let t1 = parseInt(document.getElementById('th1').value) || 25;
+  let t2 = parseInt(document.getElementById('th2').value) || 50;
+  let t3 = parseInt(document.getElementById('th3').value) || 75;
+  let t4 = parseInt(document.getElementById('th4').value) || 99;
+  
+  // Валидация: пороги должны идти по возрастанию
+  if (t1 >= t2) t2 = t1 + 1;
+  if (t2 >= t3) t3 = t2 + 1;
+  if (t3 >= t4) t4 = t3 + 1;
+  if (t4 >= 100) t4 = 99;
+  
+  return [t1, t2, t3, t4];
+}
+
+function getCurrentColors() {
+  return [
+    document.getElementById('color0').value,
+    document.getElementById('color1').value,
+    document.getElementById('color2').value,
+    document.getElementById('color3').value,
+    document.getElementById('color4').value
+  ];
+}
+
+// === СОХРАНЕНИЕ НАСТРОЕК ===
+function saveThresholds() {
+  const thresholds = getCurrentThresholds();
+  // Обновляем поля, если была авто-коррекция
+  document.getElementById('th1').value = thresholds[0];
+  document.getElementById('th2').value = thresholds[1];
+  document.getElementById('th3').value = thresholds[2];
+  document.getElementById('th4').value = thresholds[3];
+  
+  updateRangeLabels(thresholds);
+  api.storage.local.set({ thresholds });
+  
+  // Перерисовка таблицы
+  const { allContestsData, colors } = getCurrentData();
+  if (allContestsData.length > 0) {
+    render(allContestsData, colors, thresholds);
+  }
+}
+
+function saveColors() {
+  const colors = getCurrentColors();
+  api.storage.local.set({ colors });
+  
+  const { allContestsData, thresholds } = getCurrentData();
+  if (allContestsData.length > 0) {
+    render(allContestsData, colors, thresholds);
+  }
+}
+
+async function getCurrentData() {
+  const data = await api.storage.local.get(['allContestsData', 'thresholds', 'colors']);
+  return {
+    allContestsData: data.allContestsData || [],
+    thresholds: data.thresholds || DEFAULT_THRESHOLDS.slice(),
+    colors: data.colors || DEFAULT_COLORS.slice()
+  };
+}
+
+function updateRangeLabels(thresholds) {
+  const [t1, t2, t3, t4] = thresholds;
+  document.getElementById('lbl1').textContent = t1;
+  document.getElementById('lbl2').textContent = t1;
+  document.getElementById('lbl3').textContent = t2;
+  document.getElementById('lbl4').textContent = t2;
+  document.getElementById('lbl5').textContent = t3;
+  document.getElementById('lbl6').textContent = t3;
+  document.getElementById('lbl7').textContent = t4;
+}
+
+// === РЕНДЕР ТАБЛИЦЫ ===
+function render(contests, colors, thresholds) {
   const container = document.getElementById('contestsContainer');
+  if (!container) return;
   container.innerHTML = '';
   
   let totalSubmissions = 0, totalProblems = 0, totalScore = 0, totalDelta = 0;
@@ -130,50 +252,85 @@ function render(contests, colors) {
     const section = document.createElement('div');
     section.className = 'contest-section';
     
-    section.innerHTML = `
-      <div class="contest-header">
-        <h2>${contest.title}</h2>
-        <div class="contest-meta">
-          Задач: ${contest.problems.length} | 
-          Сумма баллов: <b>${contestScore}</b> |
-          Дельта: <b style="color: #ffa502;">+${contestDelta}</b> |
-          Посылок: ${contest.totalSubmissions} |
-          Дата: ${new Date(contest.timestamp).toLocaleString('ru-RU')}
-        </div>
-      </div>
-      <table>
-        <thead>
-          <tr>
-            <th>Задача</th>
-            <th>Тур (09:00-13:59)</th>
-            <th>Дорешка</th>
-            <th>Дельта</th>
-            <th>Максимум</th>
-          </tr>
-        </thead>
-      </table>
+    const header = document.createElement('div');
+    header.className = 'contest-header';
+    
+    const h2 = document.createElement('h2');
+    h2.textContent = contest.title;
+    header.appendChild(h2);
+    
+    const meta = document.createElement('div');
+    meta.className = 'contest-meta';
+    meta.innerHTML = `
+      Задач: ${contest.problems.length} | 
+      Сумма баллов: <b>${contestScore}</b> |
+      Дельта: <b style="color: #ffa502;">+${contestDelta}</b> |
+      Посылок: ${contest.totalSubmissions} |
+      Дата: ${new Date(contest.timestamp).toLocaleString('ru-RU')}
+    `;
+    header.appendChild(meta);
+    section.appendChild(header);
+    
+    const table = document.createElement('table');
+    table.innerHTML = `
+      <thead>
+        <tr>
+          <th>Задача</th>
+          <th>Тур (09:00-13:59)</th>
+          <th>Дорешка</th>
+          <th>Дельта</th>
+          <th>Максимум</th>
+        </tr>
+      </thead>
     `;
     
-    const table = section.querySelector('table');
     const tbody = document.createElement('tbody');
     
     contest.problems.forEach(p => {
       const total = Math.max(p.maxTour, p.maxUpsolve);
       const delta = p.delta || 0;
-      const color = getCellColor(total, colors);
       
       const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td><a href="${p.url}" target="_blank">${p.name}</a></td>
-        <td class="score-tour" style="background: ${getCellColor(p.maxTour, colors)}30;">${p.maxTour}</td>
-        <td class="score-upsolve" style="background: ${getCellColor(p.maxUpsolve, colors)}30;">${p.maxUpsolve}</td>
-        <td class="score-delta">${delta > 0 ? '+' + delta : delta}</td>
-        <td style="background: ${color}; color: white; font-weight: bold; text-align: center;">${total}</td>
-      `;
+      
+      const tdName = document.createElement('td');
+      const link = document.createElement('a');
+      link.href = p.url;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = p.name;
+      tdName.appendChild(link);
+      tr.appendChild(tdName);
+      
+      const tdTour = document.createElement('td');
+      tdTour.className = 'score-tour';
+      tdTour.style.background = getCellColor(p.maxTour, colors, thresholds) + '30';
+      tdTour.textContent = p.maxTour;
+      tr.appendChild(tdTour);
+      
+      const tdUpsolve = document.createElement('td');
+      tdUpsolve.className = 'score-upsolve';
+      tdUpsolve.style.background = getCellColor(p.maxUpsolve, colors, thresholds) + '30';
+      tdUpsolve.textContent = p.maxUpsolve;
+      tr.appendChild(tdUpsolve);
+      
+      const tdDelta = document.createElement('td');
+      tdDelta.className = 'score-delta';
+      tdDelta.textContent = delta > 0 ? '+' + delta : delta;
+      tr.appendChild(tdDelta);
+      
+      const tdTotal = document.createElement('td');
+      tdTotal.style.background = getCellColor(total, colors, thresholds);
+      tdTotal.style.color = 'white';
+      tdTotal.style.fontWeight = 'bold';
+      tdTotal.style.textAlign = 'center';
+      tdTotal.textContent = total;
+      tr.appendChild(tdTotal);
+      
       tbody.appendChild(tr);
     });
     
     table.appendChild(tbody);
+    section.appendChild(table);
     container.appendChild(section);
   });
   
@@ -187,17 +344,18 @@ function render(contests, colors) {
   
   window.allContests = contests;
   window.currentColors = colors;
+  window.currentThresholds = thresholds;
 }
 
-// === ЭКСПОРТ В XLSX С ЦВЕТАМИ ===
-async function exportToExcel(colors) {
+// === ЭКСПОРТ В XLSX ===
+async function exportToExcel(colors, thresholds) {
   if (!window.allContests || window.allContests.length === 0) {
     alert('Нет данных для экспорта');
     return;
   }
   
   if (typeof ExcelJS === 'undefined') {
-    alert('❌ Библиотека ExcelJS не загружена!\n\nПоложите файл exceljs.min.js в папку расширения рядом с summary.html.');
+    alert('❌ Библиотека ExcelJS не загружена!\n\nПоложите файл exceljs.min.js в папку расширения.');
     return;
   }
   
@@ -218,7 +376,6 @@ async function exportToExcel(colors) {
       { header: 'Максимум', key: 'total', width: 14 }
     ];
     
-    // Стили
     const headerFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } };
     const headerFont = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
     const thinBorder = {
@@ -228,7 +385,6 @@ async function exportToExcel(colors) {
       right: { style: 'thin', color: { argb: 'FFCCCCCC' } }
     };
     
-    // Заголовок
     const headerRow = worksheet.getRow(1);
     headerRow.height = 25;
     headerRow.eachCell(cell => {
@@ -238,7 +394,6 @@ async function exportToExcel(colors) {
       cell.border = thinBorder;
     });
     
-    // Данные
     window.allContests.forEach(contest => {
       contest.problems.forEach(p => {
         const total = Math.max(p.maxTour, p.maxUpsolve);
@@ -256,14 +411,16 @@ async function exportToExcel(colors) {
         
         // Тур
         const tourCell = row.getCell('tour');
-        tourCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: hexToArgb(getCellColor(p.maxTour, colors)) } };
+        tourCell.fill = { type: 'pattern', pattern: 'solid', 
+          fgColor: { argb: hexToArgb(getCellColor(p.maxTour, colors, thresholds)) } };
         tourCell.font = { bold: true };
         tourCell.alignment = { horizontal: 'center', vertical: 'middle' };
         tourCell.border = thinBorder;
         
         // Дорешка
         const upsolveCell = row.getCell('upsolve');
-        upsolveCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: hexToArgb(getCellColor(p.maxUpsolve, colors)) } };
+        upsolveCell.fill = { type: 'pattern', pattern: 'solid', 
+          fgColor: { argb: hexToArgb(getCellColor(p.maxUpsolve, colors, thresholds)) } };
         upsolveCell.font = { bold: true };
         upsolveCell.alignment = { horizontal: 'center', vertical: 'middle' };
         upsolveCell.border = thinBorder;
@@ -276,7 +433,8 @@ async function exportToExcel(colors) {
         
         // Максимум
         const totalCell = row.getCell('total');
-        totalCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: hexToArgb(getCellColor(total, colors)) } };
+        totalCell.fill = { type: 'pattern', pattern: 'solid', 
+          fgColor: { argb: hexToArgb(getCellColor(total, colors, thresholds)) } };
         totalCell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
         totalCell.alignment = { horizontal: 'center', vertical: 'middle' };
         totalCell.border = thinBorder;
@@ -288,14 +446,12 @@ async function exportToExcel(colors) {
           cell.alignment = { vertical: 'middle' };
         });
         
-        // Кликабельная ссылка
         const urlCell = row.getCell('url');
         urlCell.value = { text: p.url, hyperlink: p.url };
         urlCell.font = { color: { argb: 'FF0000FF' }, underline: true };
       });
     });
     
-    // Скачивание
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], { 
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 

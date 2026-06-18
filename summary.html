@@ -54,13 +54,16 @@
     button.secondary { background: #868e96; }
     button.secondary:hover { background: #495057; }
     
-    select {
-      padding: 8px;
+    select, input[type="number"] {
+      padding: 6px 8px;
       background: var(--bg-primary);
       color: var(--text-primary);
       border: 1px solid var(--border);
       border-radius: 4px;
+      font-size: 13px;
     }
+    
+    input[type="number"] { width: 60px; text-align: center; }
     
     .settings-panel {
       background: var(--bg-primary);
@@ -73,22 +76,61 @@
     .settings-row {
       display: flex;
       gap: 15px;
-      margin-bottom: 10px;
+      margin-bottom: 12px;
       align-items: center;
       flex-wrap: wrap;
     }
     
+    .settings-row:last-child { margin-bottom: 0; }
+    
     .settings-row label {
       font-size: 13px;
       color: var(--text-secondary);
+      font-weight: 500;
+    }
+    
+    .settings-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 10px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
     }
     
     .color-input {
-      width: 60px;
+      width: 50px;
       height: 30px;
-      border: none;
+      border: 1px solid var(--border);
       border-radius: 4px;
       cursor: pointer;
+      padding: 2px;
+      background: var(--bg-secondary);
+    }
+    
+    .range-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      background: var(--bg-secondary);
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+    
+    .range-group .range-label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      min-width: 60px;
+    }
+    
+    .color-preview {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border-radius: 3px;
+      border: 1px solid var(--border);
+      vertical-align: middle;
     }
     
     .contest-section { 
@@ -129,6 +171,14 @@
       margin-bottom: 20px;
       font-size: 14px;
     }
+    
+    .reset-btn {
+      padding: 4px 10px;
+      font-size: 11px;
+      background: #868e96;
+      margin-left: auto;
+    }
+    .reset-btn:hover { background: #495057; }
   </style>
 </head>
 <body>
@@ -142,6 +192,8 @@
     </div>
     
     <div id="settingsPanel" class="settings-panel" style="display: none;">
+      <!-- Тема -->
+      <div class="settings-title">🎨 Тема оформления</div>
       <div class="settings-row">
         <label>Тема:</label>
         <select id="themeSelect">
@@ -152,18 +204,64 @@
           <option value="gray">Серая</option>
         </select>
       </div>
-      <div class="settings-row">
-        <label>Раскраска баллов:</label>
+      
+      <!-- Пороги -->
+      <div class="settings-title" style="margin-top: 15px;">
+        📏 Пороги баллов
+        <button id="resetThresholds" class="reset-btn">Сбросить</button>
       </div>
       <div class="settings-row">
-        <label>≤30%:</label>
-        <input type="color" id="color30" class="color-input" value="#e74c3c">
-        <label>≤60%:</label>
-        <input type="color" id="color60" class="color-input" value="#f39c12">
-        <label>≤80%:</label>
-        <input type="color" id="color80" class="color-input" value="#7bed9f">
-        <label>100%:</label>
-        <input type="color" id="color100" class="color-input" value="#2ecc71">
+        <div class="range-group">
+          <span class="range-label">0 – </span>
+          <input type="number" id="th1" min="1" max="99" value="25">
+          <span class="range-label">%</span>
+        </div>
+        <div class="range-group">
+          <span class="range-label">– </span>
+          <input type="number" id="th2" min="1" max="99" value="50">
+          <span class="range-label">%</span>
+        </div>
+        <div class="range-group">
+          <span class="range-label">– </span>
+          <input type="number" id="th3" min="1" max="99" value="75">
+          <span class="range-label">%</span>
+        </div>
+        <div class="range-group">
+          <span class="range-label">– </span>
+          <input type="number" id="th4" min="1" max="99" value="99">
+          <span class="range-label">%</span>
+        </div>
+        <div class="range-group">
+          <span class="range-label">= 100%</span>
+        </div>
+      </div>
+      
+      <!-- Цвета -->
+      <div class="settings-title" style="margin-top: 15px;">
+        🎨 Цвета диапазонов
+        <button id="resetColors" class="reset-btn">Сбросить</button>
+      </div>
+      <div class="settings-row">
+        <div class="range-group">
+          <span class="range-label">0 – <span id="lbl1">25</span>%</span>
+          <input type="color" id="color0" class="color-input" value="#e74c3c">
+        </div>
+        <div class="range-group">
+          <span class="range-label"><span id="lbl2">25</span> – <span id="lbl3">50</span>%</span>
+          <input type="color" id="color1" class="color-input" value="#e67e22">
+        </div>
+        <div class="range-group">
+          <span class="range-label"><span id="lbl4">50</span> – <span id="lbl5">75</span>%</span>
+          <input type="color" id="color2" class="color-input" value="#f1c40f">
+        </div>
+        <div class="range-group">
+          <span class="range-label"><span id="lbl6">75</span> – <span id="lbl7">99</span>%</span>
+          <input type="color" id="color3" class="color-input" value="#7bed9f">
+        </div>
+        <div class="range-group">
+          <span class="range-label">= 100%</span>
+          <input type="color" id="color4" class="color-input" value="#2ecc71">
+        </div>
       </div>
     </div>
     
@@ -171,7 +269,6 @@
     <div id="contestsContainer"></div>
   </div>
   
-  <!-- Локальная библиотека ExcelJS -->
   <script src="exceljs.min.js"></script>
   <script src="summary.js"></script>
 </body>
